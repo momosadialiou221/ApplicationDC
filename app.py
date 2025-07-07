@@ -1,70 +1,109 @@
 import streamlit as st
 import pandas as pd
-import os
-import subprocess
+from scraper.beautifulsoup_scraper import scraper_multi_pages
+from dashboard.visualisations import afficher_dashboard
+from form.evaluation import afficher_formulaire
 
-st.set_page_config(page_title="Dakar Auto Data App", layout="wide")
+# --- Configuration de la page ---
+st.set_page_config(page_title="Dakar auto scrapper", layout="wide")
+st.title("Bienvenue dans Dakar auto scrapper")
+st.markdown("Explorez, téléchargez, visualisez et évaluez.")
 
-st.sidebar.title("Navigation")
-page = st.sidebar.radio("Aller à :", ["Dashboard", "Téléchargement", "Scraper", "Évaluation"])
+# --- Chargement du style CSS ---
+with open("style.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-# Chargement des fichiers CSV
-@st.cache_data
-def load_csv(file):
-    if os.path.exists(file):
-        return pd.read_csv(file)
-    return pd.DataFrame()
+menu = st.sidebar.radio("Navigation", [
+    "Scraper les données (nettoyées)",
+    "Télécharger les données brutes",
+    "Visualiser le dashboard",
+    "Donner votre avis"
+])
 
-files = {
-    "Données Scrappées": "scraped_data.csv",
-    "Collection 100 pages": "dakar-auto_datacolection_100page.csv",
-    "Occasion 8 pages": "dakar-auto_Occasion_8page.csv",
-    "Motos 54 pages": "dakar-auto_Motos_54page.csv",
+# --- Fichiers de données ---
+fichiers_bruts = {
+    "Les Voitures à vendre": "data/dakar-auto_datacolection_100page.xlsx",
+    "Les motos à vendre": "data/dakar-auto_Motos_54page.xlsx",
+    "Les voitures d'occasion à vendre": "data/dakar-auto_Occasion_8page.xlsx"
 }
 
-dataframes = {name: load_csv(path) for name, path in files.items()}
+fichiers_nettoyes = {
+    "Les voitures à vendre": "data/dakar-auto_datacolection_100page.csv",
+    "Les motos à vendre": "data/dakar-auto_Motos_54page.csv",
+    "Les voitures d'occasion à vendre": "data/dakar-auto_Occasion_8page.csv"
+}
 
-if page == "Dashboard":
-    st.title("Dashboard des Données Dakar Auto")
-    tab = st.selectbox("Choisissez le jeu de données à explorer", list(dataframes.keys()))
-    df = dataframes[tab]
-    if not df.empty:
-        st.dataframe(df, use_container_width=True)
-        st.write(f"**Nombre d'annonces :** {len(df)}")
-        if 'Prix' in df.columns:
-            prix_clean = pd.to_numeric(df['Prix'].str.replace(r'[^\d]', '', regex=True), errors='coerce')
-            st.write(f"**Prix moyen :** {prix_clean.mean():,.0f} FCFA")
-        if 'Marque et annee' in df.columns:
-            marques = df['Marque et annee'].str.split().str[0].value_counts().head(10)
-            st.bar_chart(marques)
-    else:
-        st.warning("Aucune donnée à afficher.")
+# --- Scraping ---
+if menu == "Scraper les données (nettoyées)":
+    st.header("Scraping des données automobilières")
+    
+    # Mapping des catégories d'affichage vers les catégories du scraper
+    categorie_mapping = {
+        "Les voitures à vendre": "voitures",
+        "Les motos à vendre": "motos",
+        "Les voitures d'occasion à vendre": "location"
+    }
+    
+    # Choix de la catégorie
+    categorie_display = st.selectbox("Choisissez une catégorie à scraper :", [
+        "Les voitures à vendre",
+        "Les motos à vendre",
+        "Les voitures d'occasion à vendre"
+    ])
 
-elif page == "Téléchargement":
-    st.title("Télécharger les fichiers de données")
-    for name, path in files.items():
-        if os.path.exists(path):
-            with open(path, "rb") as f:
-                st.download_button(f"Télécharger {name}", f, file_name=os.path.basename(path))
-        else:
-            st.info(f"Fichier {name} non trouvé.")
+    # Choix du nombre de pages
+    votre_choix = 100 
+    nb_pages = st.slider("Nombre de pages à scraper :", min_value=1, max_value=votre_choix, value=10)
 
-elif page == "Scraper":
-    st.title("Scraper les données (100 pages max)")
-    st.write("Cliquez sur le bouton pour lancer le scraping. Cela peut prendre plusieurs minutes.")
+    # Scraper les données
     if st.button("Lancer le scraping"):
-        with st.spinner("Scraping en cours..."):
-            result = subprocess.run(["python", "scraper.py"], capture_output=True, text=True)
-            if result.returncode == 0:
-                st.success("Scraping terminé. Les données sont à jour.")
-            else:
-                st.error(f"Erreur lors du scraping : {result.stderr}")
+        with st.spinner(f"Scraping {categorie_display} sur {nb_pages} page(s)..."):
+            # Utiliser la catégorie mappée pour le scraper
+            categorie_scraper = categorie_mapping[categorie_display]
+            df = scraper_multi_pages(nb_pages, categorie_scraper)  
+           
+            nom_fichier = {
+                "Les voitures à vendre": "data/dakar-auto_datacolection_100page.csv",
+                "Les motos à vendre": "data/dakar-auto_Motos_54page.csv",
+                "Les voitures d'occasion à vendre": "data/dakar-auto_Occasion_8page.csv"
+            }[categorie_display]
+            df.to_csv(nom_fichier, index=False)
+            st.success(f"Scraping terminé : {len(df)} annonces récupérées.")
+            st.dataframe(df.head())
 
-elif page == "Évaluation":
-    st.title("Évaluation de l'application")
-    note = st.slider("Notez l'application", 1, 5, 3)
-    commentaire = st.text_area("Votre commentaire")
-    if st.button("Envoyer l'évaluation"):
-        with open("evaluations.csv", "a", encoding="utf-8") as f:
-            f.write(f"{note};{commentaire}\n")
-        st.success("Merci pour votre retour !") 
+# --- Téléchargement des données brutes ---
+elif menu == "Télécharger les données brutes":
+    st.header("Téléchargement des données brutes")
+    st.markdown("Téléchargez les fichiers originaux au format `.csv` extraits avec Web Scraper.")
+
+    for titre, chemin in fichiers_bruts.items():
+        try:
+            df = pd.read_excel(chemin)
+            st.download_button(
+                label=f"Télécharger : {titre}",
+                data=df.to_csv(index=False).encode('utf-8'),
+                file_name=chemin.replace("data/", "").replace(".xlsx", ".csv"),
+                mime="text/csv"
+            )
+        except FileNotFoundError:
+            st.error(f"Fichier non trouvé : {chemin}")
+        except Exception as e:
+            st.error(f"Erreur lors du chargement de {chemin}: {str(e)}")
+
+# --- Visualisation Dashboard ---
+elif menu == "Visualiser le dashboard":
+    st.header("Dashboard des données nettoyées")
+    choix = st.selectbox("Sélectionnez une catégorie :", list(fichiers_nettoyes.keys()))
+    try:
+        df = pd.read_csv(fichiers_nettoyes[choix])
+        afficher_dashboard(df, choix)
+    except FileNotFoundError:
+        st.error(f"Fichier non trouvé : {fichiers_nettoyes[choix]}")
+        st.info("Veuillez d'abord scraper les données pour cette catégorie.")
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des données : {str(e)}")
+
+# --- Évaluation de l'application ---
+elif menu == "Donner votre avis":
+    st.header("Donnez votre avis")
+    afficher_formulaire()

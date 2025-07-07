@@ -90,6 +90,7 @@ def scrape_category(url, type_, fields, max_pages=100):
         print(f"Scraping {type_} - page {page}")
         soup = get_soup(page_url)
         cards = soup.find_all('div', class_='listing-item')
+        print(f"  Cartes trouvées : {len(cards)}")
         if not cards:
             break
         for card in cards:
@@ -119,6 +120,9 @@ def main():
             continue
         data = scrape_category(cat['url'], cat['type'], fields)
         all_data.extend(data)
+    if not all_data:
+        print("Aucune donnée n'a été scrapée. Vérifiez la structure du site ou votre connexion.")
+        return
     # Harmonisation des colonnes (ajout de colonnes vides si besoin)
     max_cols = max(len(row) for row in all_data)
     for row in all_data:
