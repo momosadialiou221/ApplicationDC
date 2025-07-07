@@ -22,9 +22,9 @@ menu = st.sidebar.radio("Navigation", [
 
 # --- Fichiers de données ---
 fichiers_bruts = {
-    "Les Voitures à vendre": "data/dakar-auto_datacolection_100page.xlsx",
-    "Les motos à vendre": "data/dakar-auto_Motos_54page.xlsx",
-    "Les voitures d'occasion à vendre": "data/dakar-auto_Occasion_8page.xlsx"
+    "Les Voitures à vendre": "data/dakar-auto_datacolection_100page.csv",
+    "Les motos à vendre": "data/dakar-auto_Motos_54page.csv",
+    "Les voitures d'occasion à vendre": "data/dakar-auto_Occasion_8page.csv"
 }
 
 fichiers_nettoyes = {
@@ -69,7 +69,18 @@ if menu == "Scraper les données (nettoyées)":
             }[categorie_display]
             df.to_csv(nom_fichier, index=False)
             st.success(f"Scraping terminé : {len(df)} annonces récupérées.")
-            st.dataframe(df.head())
+            
+            # Afficher toutes les données avec pagination
+            st.subheader(f"Résultats du scraping ({len(df)} annonces)")
+            st.dataframe(df, use_container_width=True)
+            
+            # Bouton de téléchargement direct des données scrapées
+            st.download_button(
+                label=f"Télécharger les {len(df)} annonces scrapées",
+                data=df.to_csv(index=False).encode('utf-8'),
+                file_name=f"scraped_{categorie_scraper}_{nb_pages}pages.csv",
+                mime="text/csv"
+            )
 
 # --- Téléchargement des données brutes ---
 elif menu == "Télécharger les données brutes":
@@ -78,7 +89,7 @@ elif menu == "Télécharger les données brutes":
 
     for titre, chemin in fichiers_bruts.items():
         try:
-            df = pd.read_excel(chemin)
+            df = pd.read_csv(chemin)
             st.download_button(
                 label=f"Télécharger : {titre}",
                 data=df.to_csv(index=False).encode('utf-8'),
